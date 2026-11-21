@@ -182,7 +182,14 @@ fi
 uci -q delete wireless.staff
 uci -q delete wireless.guest
 
-for r in $RADIOS; do
+# Per-SSID radio lists. Default: every radio, i.e. the SSID is DUAL BAND.
+# Override e.g. GUEST_RADIOS=radio0 to keep guests on 2.4 GHz only.
+STAFF_RADIOS=${STAFF_RADIOS:-$RADIOS}
+GUEST_RADIOS=${GUEST_RADIOS:-$RADIOS}
+log "wireless: $SSID_STAFF on [$STAFF_RADIOS] (dual band)"
+log "wireless: $SSID_GUEST on [$GUEST_RADIOS]"
+
+for r in $STAFF_RADIOS; do
     uci set "wireless.staff_$r=wifi-iface"
     uci set "wireless.staff_$r.device=$r"
     uci set "wireless.staff_$r.mode='ap'"
@@ -192,7 +199,9 @@ for r in $RADIOS; do
     uci set "wireless.staff_$r.ieee80211w='2'"
     uci set "wireless.staff_$r.isolate='1'"
     uci set "wireless.staff_$r.disabled='0'"
+done
 
+for r in $GUEST_RADIOS; do
     uci set "wireless.guest_$r=wifi-iface"
     uci set "wireless.guest_$r.device=$r"
     uci set "wireless.guest_$r.mode='ap'"
