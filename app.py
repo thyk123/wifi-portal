@@ -23,7 +23,7 @@ import time
 import urllib.parse
 
 import requests
-from flask import Flask, abort, redirect, render_template, request
+from flask import Flask, abort, redirect, render_template, request, session
 
 SSO = os.environ["SSO_URL"].rstrip("/")
 CLIENT_ID = os.environ["CASDOOR_CLIENT_ID"]
@@ -56,7 +56,18 @@ BRAND = {
 }
 
 app = Flask(__name__)
-STATE = {}          # state -> dict; single process only (redis for replicas)
+
+# The OIDC state must survive across gunicorn workers and restarts, so it is
+# kept in a signed cookie instead of process memory. The key is derived from
+# the Casdoor client secret, so every worker computes the same value.
+app.secret_key = os.environ.get("PORTAL_SECRET") or (CLIENT_SECRET + "-portal-state")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=PORTAL.startswith("https"),
+    SESSION_COOKIE_NAME="wifi_portal_state",
+)
+STATE_TTL = 600     # seconds a pending login stays valid
 
 
 @app.after_request
@@ -179,11 +190,12 @@ def hotspot_sso():
         abort(403, "SSO is only available on the staff network")
 
     state = secrets.token_urlsafe(24)
-    STATE[state] = {
+    session["pending"] = {
+        "state": state,
         "ip": ip,
         "mac": mac,
         "orig": orig,
-        "exp": time.time() + 600,
+        "exp": time.time() + STATE_TTL,
     }
     cfg = oidc_config()
     query = urllib.parse.urlencode(
@@ -202,8 +214,8 @@ def hotspot_sso():
 def callback():
     state = request.args.get("state", "")
     code = request.args.get("code", "")
-    data = STATE.pop(state, None)
-    if not data or data["exp"] < time.time():
+    data = session.pop("pending", None)
+    if not data or data.get("state") != state or data["exp"] < time.time():
         abort(400, "expired login, please reconnect to the Wi-Fi")
     if not is_staff_client(data["ip"]):
         abort(403, "network mismatch, please reconnect to the staff Wi-Fi")
