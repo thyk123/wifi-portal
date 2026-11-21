@@ -234,7 +234,36 @@ uci set firewall.guest.output='DROP'
 uci set firewall.guest.forward='DROP'
 uci add_list firewall.guest.network='guest'
 
+# --- management access: SSH + LuCI reachable from ANY zone ---------------
+# Explicitly allowed so a mis-set zone policy can never lock us out again.
+for keep in ssh_any web_any; do uci -q delete "firewall.$keep"; done
+uci set firewall.ssh_any=rule
+uci set firewall.ssh_any.name='Allow-SSH-any-zone'
+uci set firewall.ssh_any.src='*'
+uci set firewall.ssh_any.proto='tcp'
+uci set firewall.ssh_any.dest_port='22'
+uci set firewall.ssh_any.target='ACCEPT'
+
+uci set firewall.web_any=rule
+uci set firewall.web_any.name='Allow-LuCI-any-zone'
+uci set firewall.web_any.src='*'
+uci set firewall.web_any.proto='tcp'
+uci set firewall.web_any.dest_port='80 443'
+uci set firewall.web_any.target='ACCEPT'
+
+# dropbear: listen on every interface + allow password & key auth
+if ! uci -q get dropbear.@dropbear[0] >/dev/null 2>&1; then
+    uci add dropbear dropbear >/dev/null
+fi
+uci set dropbear.@dropbear[0].Interface=''
+uci set dropbear.@dropbear[0].PasswordAuth='on'
+uci set dropbear.@dropbear[0].RootPasswordAuth='on'
+uci set dropbear.@dropbear[0].Port='22'
+
 uci commit firewall
+uci commit dropbear
+
+log "mgmt: ssh+luci open on all zones, dropbear on all interfaces"
 
 # ---------------------------------------------------------------------------
 log "applying"
@@ -260,6 +289,7 @@ log "watchdog: revert+reboot in ${WATCHDOG}s unless /tmp/ap-keep exists"
 sleep 3
 wifi reload || wifi up || true
 /etc/init.d/firewall reload || true
+/etc/init.d/dropbear restart || true
 
 echo
 log "CONFIRM within ${WATCHDOG}s:  ssh root@<new-ip> 'touch /tmp/ap-keep'"
