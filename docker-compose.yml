@@ -32,3 +32,13 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
+    # Join Caddy's network so it can proxy by container name.
+    # Rootless podman containers cannot reach host-published ports, so
+    # reverse_proxy must point at wifi-portal:8585, never at a host IP.
+    networks:
+      - caddy
+
+networks:
+  caddy:
+    external: true
+    name: ${CADDY_NETWORK:-caddy-cloudflare_default}
