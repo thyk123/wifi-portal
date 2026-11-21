@@ -29,8 +29,8 @@ RADIO=${RADIO:-radio0}               # radio to broadcast on
 MGMT=${MGMT:-static}                # dhcp | static  (mgmt rides untagged -> VLAN 100)
 MGMT_IP=${MGMT_IP:-192.168.88.21}    # only for MGMT=static (one per AP)
 MGMT_GW=${MGMT_GW:-192.168.88.1}
-SSID_STAFF=${SSID_STAFF:-Office-Staff}
-SSID_GUEST=${SSID_GUEST:-Office-Guest}
+SSID_STAFF=${SSID_STAFF:-Office@GadingKonseling}
+SSID_GUEST=${SSID_GUEST:-Guest@GadingKonseling}
 DISABLE_OTHER=${DISABLE_OTHER:-1}    # 1 = turn off any other SSID on that radio
 
 [ -f /etc/openwrt_release ] || { echo "!! not OpenWrt"; exit 1; }
