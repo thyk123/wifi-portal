@@ -99,7 +99,11 @@ def router_post(path, payload):
         verify=False,
         timeout=8,
     )
-    r.raise_for_status()
+    if r.status_code >= 400:
+        safe = {k: (v if k != "password" else "***") for k, v in payload.items()}
+        raise RuntimeError(
+            f"router POST {path} -> {r.status_code}: {r.text[:300]} payload={safe}"
+        )
     return r.json() if r.text else {}
 
 
@@ -134,6 +138,7 @@ def is_staff_client(ip):
 
 
 def ensure_user(name, password, profile):
+    app.logger.info("ensure_user name=%r profile=%s", name, profile)
     existing = router_get("ip/hotspot/user", name=name)
     if existing:
         uid = urllib.parse.quote(existing[0][".id"])
