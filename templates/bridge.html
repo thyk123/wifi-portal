@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#43160D">
+<title>Menghubungkan &middot; {{ brand.name }}</title>
+<style>
+  body{
+    margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#43160D;
+    background:radial-gradient(900px 400px at 20% -10%,rgba(244,211,13,.22),transparent 60%),#FDFBF7;
+    padding:24px;
+  }
+  .box{text-align:center;max-width:340px}
+  .spinner{
+    width:38px;height:38px;margin:0 auto 16px;border-radius:50%;
+    border:3px solid rgba(67,22,13,.15);border-top-color:#F4D30D;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  p{font-size:13.5px;line-height:1.6;color:#7D3830;margin:0}
+  strong{color:#43160D}
+  noscript p{color:#954638}
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="spinner" aria-hidden="true"></div>
+    <p>Menghubungkan Anda ke internet&hellip;</p>
+    <noscript><p>JavaScript nonaktif — tekan tombol di bawah untuk melanjutkan.</p></noscript>
+
+    <!-- MikroTik hotspot login form; auto-submitted by JS, works without it too -->
+    <form id="hs" method="post" action="{{ login_url }}" style="margin-top:18px">
+      <input type="hidden" name="username" value="{{ username }}">
+      <input type="hidden" name="password" value="{{ password }}">
+      <input type="hidden" name="dst" value="{{ dst }}">
+      <input type="hidden" name="popup" value="false">
+      <button type="submit"
+        style="min-height:48px;padding:12px 22px;border:0;border-radius:12px;background:#43160D;color:#FDFBF7;font:inherit;font-weight:700;cursor:pointer">
+        Lanjutkan
+      </button>
+    </form>
+    <script>document.getElementById('hs').submit();</script>
+  </div>
+</body>
+</html>

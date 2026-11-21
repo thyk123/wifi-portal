@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#43160D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Wi-Fi &middot; {{ brand.name }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --maroon:#43160D;
+    --maroon-800:#6A302C;
+    --gold:#F4D30D;
+    --gold-600:#CAAD04;
+    --cream:#FDFBF7;
+    --cream-100:#F5F1E8;
+    --cream-200:#EDE5D4;
+    --ink:#2E0E08;
+    --muted:#7D3830;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family:'Montserrat',system-ui,-apple-system,'Segoe UI',sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(1200px 520px at 12% -10%, rgba(244,211,13,.20), transparent 60%),
+      radial-gradient(900px 420px at 110% 115%, rgba(67,22,13,.14), transparent 60%),
+      repeating-linear-gradient(115deg, rgba(67,22,13,.035) 0 2px, transparent 2px 9px),
+      var(--cream);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px 18px calc(24px + env(safe-area-inset-bottom));
+    min-height:100%;
+  }
+  .card{
+    width:100%;
+    max-width:420px;
+    background:linear-gradient(180deg,#fff 0%,var(--cream) 60%,var(--cream-100) 100%);
+    border:1px solid var(--cream-200);
+    border-radius:24px;
+    box-shadow:0 24px 60px -30px rgba(67,22,13,.45), 0 2px 0 rgba(255,255,255,.7) inset;
+    padding:34px 26px 24px;
+    text-align:center;
+    animation:rise .5s ease-out both;
+  }
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.card{animation:none}}
+
+  .logo{max-width:210px;max-height:58px;width:auto;height:auto;margin:0 auto 18px;display:block}
+  .wordmark{
+    font-family:'Playfair Display',Georgia,serif;
+    font-size:30px;line-height:1.1;font-weight:700;color:var(--maroon);
+    margin:0 0 6px;letter-spacing:-.01em;
+  }
+  .eyebrow{
+    font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;
+    font-weight:700;color:var(--gold-600);margin:0 0 14px;
+  }
+  .rule{
+    width:44px;height:3px;border-radius:2px;background:var(--gold);
+    margin:0 auto 20px;
+  }
+  h2{
+    font-family:'Playfair Display',Georgia,serif;
+    font-size:21px;font-weight:600;color:var(--maroon);
+    margin:0 0 8px;
+  }
+  p.lead{
+    font-size:13.5px;line-height:1.65;color:var(--muted);
+    margin:0 0 22px;
+  }
+
+  .btn{
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    width:100%;min-height:54px;padding:14px 18px;
+    border-radius:14px;border:0;cursor:pointer;
+    font-family:inherit;font-size:15px;font-weight:700;letter-spacing:.01em;
+    text-decoration:none;transition:transform .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-gold{
+    background:var(--gold);color:var(--maroon);
+    box-shadow:0 10px 24px -12px rgba(202,173,4,.9);
+  }
+  .btn-gold:hover{background:#ffdf2b}
+  .btn-maroon{
+    background:var(--maroon);color:var(--cream);
+    box-shadow:0 10px 24px -12px rgba(67,22,13,.9);
+  }
+  .btn-maroon:hover{background:#521b10}
+  .btn-ghost{
+    background:transparent;color:var(--maroon);
+    border:1.5px solid rgba(67,22,13,.22);
+  }
+  .btn-ghost:hover{border-color:rgba(67,22,13,.45)}
+  .btn svg{width:18px;height:18px;flex:0 0 18px}
+
+  .hint{font-size:11.5px;color:var(--muted);margin:10px 0 0;line-height:1.5}
+  .split{display:flex;align-items:center;gap:12px;margin:18px 0;color:var(--cream-200)}
+  .split::before,.split::after{content:'';height:1px;flex:1;background:currentColor}
+  .split span{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:#B79243;font-weight:700}
+
+  .badges{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:18px 0 0}
+  .badge{
+    font-size:10.5px;font-weight:600;color:var(--maroon-800);
+    background:rgba(244,211,13,.16);border:1px solid rgba(244,211,13,.45);
+    border-radius:999px;padding:5px 10px;
+  }
+
+  footer{margin-top:22px;padding-top:16px;border-top:1px solid var(--cream-200)}
+  footer p{font-size:10.5px;line-height:1.6;color:#954638;margin:0 0 6px}
+  footer a{color:var(--maroon);text-decoration:none;border-bottom:1px solid rgba(67,22,13,.25)}
+  footer a:hover{border-color:var(--maroon)}
+</style>
+</head>
+<body>
+  <main class="card">
+    {% if brand.logo %}
+      <img class="logo" src="{{ brand.logo }}" alt="{{ brand.name }}">
+    {% else %}
+      <div class="wordmark">Gading</div>
+    {% endif %}
+    <p class="eyebrow">{{ brand.name }}</p>
+    <div class="rule"></div>
+
+    <h2>Jaringan Kantor</h2>
+    <p class="lead">Masuk dengan akun SSO Gading untuk mengakses internet dan layanan internal kantor.</p>
+    <a class="btn btn-gold" href="/hotspot/sso?ip={{ ip }}&mac={{ mac }}&orig={{ orig }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+      Masuk dengan SSO
+    </a>
+    <p class="hint">Gunakan akun kantor Anda. Verifikasi dua langkah (MFA) didukung.</p>
+    <div class="badges"><span class="badge">Karyawan</span><span class="badge">Aman &middot; OWE</span></div>
+
+    <footer>
+      <p>Dengan terhubung, Anda menyetujui <a href="{{ brand.terms }}" target="_blank" rel="noopener">kebijakan penggunaan jaringan</a>.</p>
+      <p>Butuh bantuan? <a href="{{ brand.support }}" target="_blank" rel="noopener">Hubungi kami</a></p>
+    </footer>
+  </main>
+</body>
+</html>
