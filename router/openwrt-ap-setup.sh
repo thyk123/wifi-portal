@@ -73,6 +73,32 @@ fi
 # ---------------------------------------------------------------------------
 log "network: bridge VLANs 1 (mgmt) / 100 (staff) / 200 (guest)"
 
+# The trunk port must be a member of the LAN bridge before VLAN tagging means
+# anything. On DSA targets (mediatek/filogic etc.) wan is a separate netdev
+# that may still be owned by a 'wan' interface - detach it first.
+BRDEV=$(uci show network 2>/dev/null | sed -n "s/^network\.\([^.]*\)\.name='br-lan'$/\1/p" | head -1)
+if [ -z "$BRDEV" ]; then
+    BRDEV=$(uci add network device)
+    uci set "network.$BRDEV.name=br-lan"
+    uci set "network.$BRDEV.type=bridge"
+fi
+uci add_list "network.$BRDEV.ports=$TRUNK" 2>/dev/null || true
+# de-duplicate ports
+PORTS=$(uci -q get "network.$BRDEV.ports" | tr ' ' '\n' | awk '!seen[$0]++' | tr '\n' ' ')
+uci -q delete "network.$BRDEV.ports"
+for p in $PORTS; do uci add_list "network.$BRDEV.ports=$p"; done
+
+# remove the WAN interface that owns the trunk port (dumb-AP mode)
+for w in wan wan6; do
+    if uci -q get "network.$w" >/dev/null 2>&1; then
+        if _has_trunk=; uci -q get "network.$w.device" | grep -qx "$TRUNK"; then _has_trunk=1; fi
+        if [ -n "${_has_trunk:-}" ]; then
+            log "network: removing interface '$w' (it owned $TRUNK)"
+            uci delete "network.$w"
+        fi
+    fi
+done
+
 # rebuild the VLAN table from scratch (idempotent)
 while uci -q delete network.@bridge-vlan[0]; do :; done
 
