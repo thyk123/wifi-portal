@@ -1,0 +1,35 @@
+<!-- Guest hotspot page after logout.
+     Upload to: /hotspot-guest/logout.html -->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#43160D">
+<title>Terputus · Gading Counseling &amp; Empowerment Center</title>
+<style>
+/*__TAILWIND_CSS__*/
+</style>
+</head>
+<body class="min-h-screen flex items-center justify-center px-5 py-7 text-maroon-deep antialiased">
+
+  <main class="w-full max-w-[430px] bg-white border border-cream-line rounded-card shadow-card text-center px-8 pt-10 pb-7">
+    <img class="block mx-auto mb-6 w-full max-w-[240px] h-auto"
+         src="data:image/png;base64,/*__LOGO_B64__*/"
+         alt="Gading Counseling &amp; Empowerment Center">
+
+    <h2 class="font-display text-xl font-bold text-maroon mb-2">Koneksi Diputus</h2>
+    <p class="text-[13.5px] leading-relaxed text-muted mb-7">Anda sudah terputus dari Wi-Fi Tamu. Terima kasih telah berkunjung.</p>
+
+    <a class="block w-full rounded-2xl bg-maroon py-4 px-4 text-[15px] font-bold text-white shadow-btn active:translate-y-px no-underline text-center"
+       href="$(link-login-only)?username=T-$(mac-esc)&amp;dst=$(link-status)">
+      Hubungkan Kembali
+    </a>
+
+    <footer class="mt-6 border-t border-cream-line pt-4">
+      <p class="text-[10.5px] leading-relaxed text-[#954638]">Kami siap mendengarkan —
+        <a class="text-maroon underline decoration-maroon/25 underline-offset-2" href="https://gadingkonseling.org">gadingkonseling.org</a></p>
+    </footer>
+  </main>
+
+</body>
+</html>

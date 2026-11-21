@@ -9,3 +9,6 @@ venv/
 
 # unused: the guest hotspot serves the router's own trial page
 templates/guest.html
+
+# guest hotspot build artefacts
+router/guest/build/compiled.css

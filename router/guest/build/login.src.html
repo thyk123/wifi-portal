@@ -1,0 +1,51 @@
+<!-- Guest hotspot login page — TRIAL mode, NO username/password.
+     Served by the router (MikroTik hotspot), works over HTTP and HTTPS.
+     Upload to: /hotspot-guest/login.html
+     Profile: hs-guest -> html-directory=hotspot-guest, login-by=cookie,trial,https
+     Button uses MikroTik trial convention: username=T-<mac>. No accounts.
+     CSS: compiled Tailwind, inlined at build time (never a CDN). -->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#43160D">
+<title>Wi-Fi Tamu · Gading Counseling &amp; Empowerment Center</title>
+<style>
+/*__TAILWIND_CSS__*/
+</style>
+</head>
+<body class="min-h-screen flex items-center justify-center px-5 py-7 text-maroon-deep antialiased">
+
+  <main class="w-full max-w-[430px] bg-white border border-cream-line rounded-card shadow-card text-center px-8 pt-10 pb-7">
+    <img class="block mx-auto mb-7 w-full max-w-[340px] h-auto"
+         src="data:image/png;base64,/*__LOGO_B64__*/"
+         alt="Gading Counseling &amp; Empowerment Center">
+
+    <div class="mx-auto mb-6 h-[3px] w-11 rounded bg-gold"></div>
+
+    <h2 class="font-display text-xl font-bold text-maroon mb-2">Wi-Fi Tamu</h2>
+    <p class="text-[13.5px] leading-relaxed text-muted mb-6">Selamat datang. Tekan tombol di bawah untuk terhubung ke internet — tanpa akun, tanpa kata sandi.</p>
+
+    $(if error)<div class="mb-4 rounded-xl border border-[#E6BDB2] bg-[#F9EFED] px-3 py-2.5 text-xs leading-relaxed text-[#954638]">$(error)</div>$(endif)
+
+    <a class="block w-full rounded-2xl bg-maroon py-4 px-4 text-[15px] font-bold text-white shadow-btn active:translate-y-px no-underline text-center"
+       href="$(link-login-only)?username=T-$(mac-esc)&amp;dst=$(link-status)">
+      Hubungkan ke Internet
+    </a>
+
+    <div class="mt-5 flex flex-wrap items-center justify-center gap-2">
+      <span class="rounded-full border border-gold/50 bg-gold/15 px-3 py-1.5 text-[10.5px] font-semibold text-[#6A302C]">Sesi 4 jam</span>
+      <span class="rounded-full border border-gold/50 bg-gold/15 px-3 py-1.5 text-[10.5px] font-semibold text-[#6A302C]">Kecepatan 5 Mbps</span>
+      <span class="rounded-full border border-gold/50 bg-gold/15 px-3 py-1.5 text-[10.5px] font-semibold text-[#6A302C]">Tanpa akun</span>
+    </div>
+
+    <footer class="mt-6 border-t border-cream-line pt-4">
+      <p class="text-[10.5px] leading-relaxed text-[#954638] mb-1">Dengan terhubung, Anda menyetujui
+        <a class="text-maroon underline decoration-maroon/25 underline-offset-2" href="https://gadingkonseling.org/kebijakan-privasi">kebijakan penggunaan jaringan</a>.</p>
+      <p class="text-[10.5px] leading-relaxed text-[#954638]">Butuh bantuan?
+        <a class="text-maroon underline decoration-maroon/25 underline-offset-2" href="https://gadingkonseling.org">gadingkonseling.org</a></p>
+    </footer>
+  </main>
+
+</body>
+</html>

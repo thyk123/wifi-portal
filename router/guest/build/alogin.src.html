@@ -1,0 +1,48 @@
+<!-- Guest hotspot status page — shown after a successful trial login.
+     Upload to: /hotspot-guest/alogin.html
+     Vars: $(username) $(ip) $(mac) $(uptime) $(session-time-left) $(link-logout) -->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#43160D">
+<title>Tersambung · Gading Counseling &amp; Empowerment Center</title>
+<style>
+/*__TAILWIND_CSS__*/
+</style>
+</head>
+<body class="min-h-screen flex items-center justify-center px-5 py-7 text-maroon-deep antialiased">
+
+  <main class="w-full max-w-[430px] bg-white border border-cream-line rounded-card shadow-card text-center px-8 pt-10 pb-7">
+    <img class="block mx-auto mb-6 w-full max-w-[260px] h-auto"
+         src="data:image/png;base64,/*__LOGO_B64__*/"
+         alt="Gading Counseling &amp; Empowerment Center">
+
+    <div class="mx-auto mb-6 h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
+      <svg class="h-6 w-6 text-green-700" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+      </svg>
+    </div>
+
+    <h2 class="font-display text-xl font-bold text-maroon mb-1">Anda Terhubung</h2>
+    <p class="text-[13.5px] leading-relaxed text-muted mb-6">Selamat berselancar. Sesi tamu Anda tetap aktif hingga <span class="font-semibold text-maroon">$(session-time-left)</span>.</p>
+
+    <div class="mb-6 rounded-2xl border border-cream-line bg-cream-soft px-4 py-3 text-left text-xs leading-relaxed text-muted">
+      <div class="flex justify-between py-0.5"><span>Perangkat</span><span class="font-semibold text-maroon-deep">$(username)</span></div>
+      <div class="flex justify-between py-0.5"><span>Alamat IP</span><span class="font-semibold text-maroon-deep">$(ip)</span></div>
+      <div class="flex justify-between py-0.5"><span>Terhubung sejak</span><span class="font-semibold text-maroon-deep">$(uptime)</span></div>
+    </div>
+
+    <a class="block w-full rounded-2xl border-2 border-maroon py-3.5 px-4 text-[14px] font-bold text-maroon no-underline active:translate-y-px"
+       href="$(link-logout)">
+      Putuskan Koneksi
+    </a>
+
+    <footer class="mt-6 border-t border-cream-line pt-4">
+      <p class="text-[10.5px] leading-relaxed text-[#954638]">Butuh bantuan?
+        <a class="text-maroon underline decoration-maroon/25 underline-offset-2" href="https://gadingkonseling.org">gadingkonseling.org</a></p>
+    </footer>
+  </main>
+
+</body>
+</html>
