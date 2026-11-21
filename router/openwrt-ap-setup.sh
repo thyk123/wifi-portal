@@ -46,14 +46,28 @@ log "backup: /etc/config/{network,wireless,firewall,dhcp}.bak.$STAMP"
 
 # ---------------------------------------------------------------------------
 log "packages: full wpad (OWE + 802.11w)"
-if ! opkg list-installed 2>/dev/null | grep -Eq '^wpad-(mbedtls|openssl) '; then
-    opkg update
-    for p in wpad-basic-mbedtls wpad-basic-openssl wpad-mini; do
-        opkg remove --force-depends "$p" 2>/dev/null || true
-    done
-    opkg install wpad-mbedtls
+# Handle opkg (<=24.10), apk (>=25.x) and vendor builds with neither.
+if command -v opkg >/dev/null 2>&1; then
+    if ! opkg list-installed 2>/dev/null | grep -Eq '^wpad-(mbedtls|openssl) '; then
+        opkg update || true
+        for p in wpad-basic-mbedtls wpad-basic-openssl wpad-mini; do
+            opkg remove --force-depends "$p" 2>/dev/null || true
+        done
+        opkg install wpad-mbedtls || log "WARN: could not install wpad-mbedtls"
+    else
+        echo "already installed"
+    fi
+elif command -v apk >/dev/null 2>&1; then
+    if ! apk info -e wpad-mbedtls >/dev/null 2>&1; then
+        apk update || true
+        apk del wpad-basic-mbedtls wpad-basic-openssl wpad-mini 2>/dev/null || true
+        apk add wpad-mbedtls || log "WARN: could not install wpad-mbedtls"
+    else
+        echo "already installed"
+    fi
 else
-    echo "already installed"
+    log "WARN: no opkg/apk on this firmware - skipping package step"
+    log "      OWE needs the full wpad; check with: iwinfo | head"
 fi
 
 # ---------------------------------------------------------------------------
