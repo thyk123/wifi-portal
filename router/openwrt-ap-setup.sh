@@ -29,8 +29,8 @@ RADIO=${RADIO:-radio0}               # radio to broadcast on
 MGMT=${MGMT:-static}                # dhcp | static  (mgmt rides untagged -> VLAN 100)
 MGMT_IP=${MGMT_IP:-192.168.88.21}    # only for MGMT=static (one per AP)
 MGMT_GW=${MGMT_GW:-192.168.88.1}
-SSID_STAFF=${SSID_STAFF:-Office@GadingKonseling}
-SSID_GUEST=${SSID_GUEST:-Guest@GadingKonseling}
+SSID_STAFF=${SSID_STAFF:-Office@GadingCounseling}
+SSID_GUEST=${SSID_GUEST:-Guest@GadingCounseling}
 # Permanent rescue address kept on the LAN ports. Even if the trunk/VLANs are
 # wrong, plugging a laptop into lan2..lan4 always reaches the AP here.
 RESCUE_IP=${RESCUE_IP:-192.168.1.1}
@@ -203,26 +203,6 @@ for r in $RADIOS; do
     uci set "wireless.guest_$r.isolate='1'"
     uci set "wireless.guest_$r.disabled='0'"
 done
-
-uci set wireless.staff=wifi-iface
-uci set wireless.staff.device="$RADIO"
-uci set wireless.staff.mode='ap'
-uci set wireless.staff.ssid="$SSID_STAFF"
-uci set wireless.staff.network='staff'
-uci set wireless.staff.encryption='owe'
-uci set wireless.staff.ieee80211w='2'
-uci set wireless.staff.isolate='1'
-uci set wireless.staff.disabled='0'
-
-uci set wireless.guest=wifi-iface
-uci set wireless.guest.device="$RADIO"
-uci set wireless.guest.mode='ap'
-uci set wireless.guest.ssid="$SSID_GUEST"
-uci set wireless.guest.network='guest'
-uci set wireless.guest.encryption='owe'
-uci set wireless.guest.ieee80211w='2'
-uci set wireless.guest.isolate='1'
-uci set wireless.guest.disabled='0'
 
 uci commit wireless
 
