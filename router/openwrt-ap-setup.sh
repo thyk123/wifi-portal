@@ -88,6 +88,9 @@ if [ -z "$BRDEV" ]; then
     uci set "network.$BRDEV.type=bridge"
 fi
 uci add_list "network.$BRDEV.ports=$TRUNK" 2>/dev/null || true
+# remember the pre-existing LAN ports (lan1..lan4) before touching VLANs
+LANPORTS=$(uci -q get "network.$BRDEV.ports" | tr ' ' '\n' | grep -vx "$TRUNK" | grep -v '^$' | tr '\n' ' ')
+log "network: lan ports = [$LANPORTS] trunk = $TRUNK"
 # de-duplicate ports
 PORTS=$(uci -q get "network.$BRDEV.ports" | tr ' ' '\n' | awk '!seen[$0]++' | tr '\n' ' ')
 uci -q delete "network.$BRDEV.ports"
@@ -104,12 +107,29 @@ for w in wan wan6; do
     fi
 done
 
+# A zone pointing at a deleted network makes fw4 refuse to load, which would
+# leave the OLD ruleset active - strip the removed interfaces from the wan zone.
+if ! uci -q get network.wan >/dev/null 2>&1; then
+    ZW=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'$/\1/p" | head -1)
+    if [ -n "$ZW" ]; then
+        uci -q delete "firewall.$ZW.network" || true
+        uci -q delete "firewall.$ZW.masq" || true
+        uci -q delete "firewall.$ZW.mtu_fix" || true
+        log "firewall: cleaned wan zone ($ZW) after removing the wan interface"
+    fi
+fi
+
 # rebuild the VLAN table from scratch (idempotent)
 while uci -q delete network.@bridge-vlan[0]; do :; done
 
 uci add network bridge-vlan >/dev/null
 uci set network.@bridge-vlan[-1].device='br-lan'
 uci set network.@bridge-vlan[-1].vlan='1'
+# VLAN 1 = untagged everywhere: the trunk AND every local LAN port, so the
+# rescue address stays reachable on lan1..lan4.
+for p in $LANPORTS; do
+    uci add_list network.@bridge-vlan[-1].ports="$p:u*"
+done
 uci add_list network.@bridge-vlan[-1].ports="$TRUNK:u*"
 
 uci add network bridge-vlan >/dev/null
@@ -164,7 +184,7 @@ log "wireless: two OWE SSIDs on every radio (dual band), client isolation"
 
 # RADIOS=auto -> every wifi-device present (radio0 = 2.4G, radio1 = 5G, ...)
 if [ "${RADIOS:-auto}" = "auto" ]; then
-    RADIOS=$(uci show wireless 2>/dev/null | sed -n "s/^wireless\.\(radio[0-9]*\)=wifi-device$/\1/p" | sort)
+    RADIOS=$(uci show wireless 2>/dev/null | sed -n "s/^wireless\.\(radio[0-9]*\)=wifi-device$/\1/p" | sort || true)
     [ -n "$RADIOS" ] || RADIOS="$RADIO"
 fi
 log "wireless: radios = $RADIOS"
@@ -234,22 +254,39 @@ uci set firewall.guest.output='DROP'
 uci set firewall.guest.forward='DROP'
 uci add_list firewall.guest.network='guest'
 
-# --- management access: SSH + LuCI reachable from ANY zone ---------------
-# Explicitly allowed so a mis-set zone policy can never lock us out again.
-for keep in ssh_any web_any; do uci -q delete "firewall.$keep"; done
-uci set firewall.ssh_any=rule
-uci set firewall.ssh_any.name='Allow-SSH-any-zone'
-uci set firewall.ssh_any.src='*'
-uci set firewall.ssh_any.proto='tcp'
-uci set firewall.ssh_any.dest_port='22'
-uci set firewall.ssh_any.target='ACCEPT'
+# --- management access: SSH + LuCI only from the management subnets --------
+# Reachable over the trunk (untagged -> VLAN 100) but never from Wi-Fi clients.
+MGMT_NET=${MGMT_NET:-192.168.88.0/24}
+ADMIN_NETS=${ADMIN_NETS:-"192.168.88.0/24 10.10.10.0/24 192.168.1.0/24"}
+for keep in ssh_any web_any deny_clients; do uci -q delete "firewall.$keep"; done
 
-uci set firewall.web_any=rule
-uci set firewall.web_any.name='Allow-LuCI-any-zone'
-uci set firewall.web_any.src='*'
-uci set firewall.web_any.proto='tcp'
-uci set firewall.web_any.dest_port='80 443'
-uci set firewall.web_any.target='ACCEPT'
+uci set firewall.deny_clients=rule
+uci set firewall.deny_clients.name='Deny-mgmt-from-wifi-clients'
+uci set firewall.deny_clients.src='*'
+uci set firewall.deny_clients.src_ip='10.77.0.0/16'
+uci set firewall.deny_clients.proto='tcp'
+uci set firewall.deny_clients.dest_port='22 80 443'
+uci set firewall.deny_clients.target='DROP'
+
+n=0
+for net in $ADMIN_NETS; do
+    n=$((n + 1))
+    uci set "firewall.admin_ssh_$n=rule"
+    uci set "firewall.admin_ssh_$n.name=Allow-SSH-$net"
+    uci set "firewall.admin_ssh_$n.src=*"
+    uci set "firewall.admin_ssh_$n.src_ip=$net"
+    uci set "firewall.admin_ssh_$n.proto=tcp"
+    uci set "firewall.admin_ssh_$n.dest_port=22"
+    uci set "firewall.admin_ssh_$n.target=ACCEPT"
+
+    uci set "firewall.admin_web_$n=rule"
+    uci set "firewall.admin_web_$n.name=Allow-LuCI-$net"
+    uci set "firewall.admin_web_$n.src=*"
+    uci set "firewall.admin_web_$n.src_ip=$net"
+    uci set "firewall.admin_web_$n.proto=tcp"
+    uci set "firewall.admin_web_$n.dest_port=80 443"
+    uci set "firewall.admin_web_$n.target=ACCEPT"
+done
 
 # dropbear: listen on every interface + allow password & key auth
 if ! uci -q get dropbear.@dropbear[0] >/dev/null 2>&1; then
