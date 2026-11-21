@@ -247,7 +247,11 @@ def callback():
     )
     info.raise_for_status()
     user = info.json()
-    username = user.get("name") or user.get("preferred_username") or user.get("sub")
+    # Casdoor: preferred_username is the login name; "name" is the display name
+    # and may contain spaces, which RouterOS rejects as a hotspot user name.
+    username = user.get("preferred_username") or user.get("name") or user.get("sub")
+    if username:
+        username = str(username).strip().replace(" ", ".")
     if not username:
         abort(400, "Casdoor returned no username")
 
