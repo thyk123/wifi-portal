@@ -31,6 +31,11 @@ MGMT_IP=${MGMT_IP:-192.168.88.21}    # only for MGMT=static (one per AP)
 MGMT_GW=${MGMT_GW:-192.168.88.1}
 SSID_STAFF=${SSID_STAFF:-Office@GadingKonseling}
 SSID_GUEST=${SSID_GUEST:-Guest@GadingKonseling}
+# Permanent rescue address kept on the LAN ports. Even if the trunk/VLANs are
+# wrong, plugging a laptop into lan2..lan4 always reaches the AP here.
+RESCUE_IP=${RESCUE_IP:-192.168.1.1}
+# Seconds the watchdog waits for a human/machine to confirm reachability.
+WATCHDOG=${WATCHDOG:-300}
 DISABLE_OTHER=${DISABLE_OTHER:-1}    # 1 = turn off any other SSID on that radio
 
 [ -f /etc/openwrt_release ] || { echo "!! not OpenWrt"; exit 1; }
@@ -133,6 +138,16 @@ else
     uci -q delete network.lan.netmask || true
 fi
 
+# --- rescue address: always present on the LAN ports -------------------------
+uci -q delete network.rescue
+uci set network.rescue=interface
+uci set network.rescue.device='br-lan'
+uci set network.rescue.proto='static'
+uci set network.rescue.ipaddr="$RESCUE_IP"
+uci set network.rescue.netmask='255.255.255.0'
+uci -q delete network.rescue.ip6assign || true
+log "network: rescue address $RESCUE_IP on the LAN ports (always reachable)"
+
 # Wi-Fi VLANs carry no IP on the AP — that alone blocks LuCI/SSH from them
 uci set network.staff=interface
 uci set network.staff.device='br-lan.100'
@@ -145,15 +160,49 @@ uci set network.guest.proto='none'
 uci commit network
 
 # ---------------------------------------------------------------------------
-log "wireless: two OWE SSIDs with client isolation"
+log "wireless: two OWE SSIDs on every radio (dual band), client isolation"
+
+# RADIOS=auto -> every wifi-device present (radio0 = 2.4G, radio1 = 5G, ...)
+if [ "${RADIOS:-auto}" = "auto" ]; then
+    RADIOS=$(uci show wireless 2>/dev/null | sed -n "s/^wireless\.\(radio[0-9]*\)=wifi-device$/\1/p" | sort)
+    [ -n "$RADIOS" ] || RADIOS="$RADIO"
+fi
+log "wireless: radios = $RADIOS"
 
 if [ "$DISABLE_OTHER" = "1" ]; then
     for s in $(uci show wireless | sed -n "s/^wireless\.\([^.=]*\)=wifi-iface$/\1/p"); do
-        [ "$s" = "staff" ] && continue
-        [ "$s" = "guest" ] && continue
+        case "$s" in
+            staff_*|guest_*|staff|guest) continue ;;
+        esac
         uci set "wireless.$s.disabled='1'"
     done
 fi
+
+# drop the old single-radio sections from previous runs
+uci -q delete wireless.staff
+uci -q delete wireless.guest
+
+for r in $RADIOS; do
+    uci set "wireless.staff_$r=wifi-iface"
+    uci set "wireless.staff_$r.device=$r"
+    uci set "wireless.staff_$r.mode='ap'"
+    uci set "wireless.staff_$r.ssid=$SSID_STAFF"
+    uci set "wireless.staff_$r.network='staff'"
+    uci set "wireless.staff_$r.encryption='${ENC_STAFF:-owe}'"
+    uci set "wireless.staff_$r.ieee80211w='2'"
+    uci set "wireless.staff_$r.isolate='1'"
+    uci set "wireless.staff_$r.disabled='0'"
+
+    uci set "wireless.guest_$r=wifi-iface"
+    uci set "wireless.guest_$r.device=$r"
+    uci set "wireless.guest_$r.mode='ap'"
+    uci set "wireless.guest_$r.ssid=$SSID_GUEST"
+    uci set "wireless.guest_$r.network='guest'"
+    uci set "wireless.guest_$r.encryption='${ENC_GUEST:-owe}'"
+    uci set "wireless.guest_$r.ieee80211w='2'"
+    uci set "wireless.guest_$r.isolate='1'"
+    uci set "wireless.guest_$r.disabled='0'"
+done
 
 uci set wireless.staff=wifi-iface
 uci set wireless.staff.device="$RADIO"
@@ -200,10 +249,32 @@ uci commit firewall
 
 # ---------------------------------------------------------------------------
 log "applying"
+
+# --- watchdog: revert everything unless somebody confirms reachability -------
+# A background job survives the network reload. If no one creates
+# /tmp/ap-keep within $WATCHDOG seconds, the previous config is restored and
+# the box reboots - so a broken AP always comes back on its old address.
+rm -f /tmp/ap-keep
+(
+    sleep "$WATCHDOG"
+    if [ ! -f /tmp/ap-keep ]; then
+        for f in network wireless firewall dhcp; do
+            [ -f "/etc/config/$f.bak.$STAMP" ] && cp "/etc/config/$f.bak.$STAMP" "/etc/config/$f"
+        done
+        logger -t ap-setup "watchdog: no confirmation, reverting and rebooting"
+        reboot
+    fi
+) >/dev/null 2>&1 &
+log "watchdog: revert+reboot in ${WATCHDOG}s unless /tmp/ap-keep exists"
+
 /etc/init.d/network reload || true
 sleep 3
 wifi reload || wifi up || true
 /etc/init.d/firewall reload || true
+
+echo
+log "CONFIRM within ${WATCHDOG}s:  ssh root@<new-ip> 'touch /tmp/ap-keep'"
+log "otherwise this AP reverts to its previous config and reboots"
 sleep 2
 
 # ---------------------------------------------------------------------------
