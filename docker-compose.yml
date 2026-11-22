@@ -22,7 +22,7 @@ services:
       STAFF_GW: ${STAFF_GW:-10.77.10.1}
       STAFF_HOTSPOT: ${STAFF_HOTSPOT:-hs-staff}
       STAFF_LOGIN_URL: ${STAFF_LOGIN_URL:-http://10.77.10.1/login}
-      STAFF_LOGIN_MODE: ${STAFF_LOGIN_MODE:-chap}
+      STAFF_LOGIN_MODE: ${STAFF_LOGIN_MODE:-pap}
       CHAP_BRIDGE_URL: ${CHAP_BRIDGE_URL:-http://10.77.10.1/bridge.html}
       BRAND_NAME: ${BRAND_NAME:-Gading Counseling & Empowerment Center}
       LOGO_URL: ${LOGO_URL:-}

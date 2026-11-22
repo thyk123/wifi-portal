@@ -58,7 +58,12 @@ STAFF_LOGIN_URL = os.environ.get("STAFF_LOGIN_URL", f"http://{STAFF_GW}/login")
 #         digest from the router-hosted bridge page (router/bridge-chap.html).
 # pap  -> the portal posts the plaintext password to the hotspot (old behaviour,
 #         keep as an emergency fallback).
-LOGIN_MODE = os.environ.get("STAFF_LOGIN_MODE", "chap").strip().lower()
+# pap  -> the portal posts the plaintext password to the hotspot. Default
+#         because it is the path proven to work end-to-end.
+# chap -> the router-hosted page hashes in the browser so the password never
+#         crosses the Wi-Fi link. Enable with STAFF_LOGIN_MODE=chap once that
+#         page has been verified on a real client.
+LOGIN_MODE = os.environ.get("STAFF_LOGIN_MODE", "pap").strip().lower()
 CHAP_BRIDGE_URL = os.environ.get("CHAP_BRIDGE_URL", f"http://{STAFF_GW}/bridge.html")
 
 BRAND = {
