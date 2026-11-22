@@ -192,6 +192,10 @@ def oidc_config():
 # --------------------------------------------------------------------- routes
 @app.get("/")
 def health():
+    # The container HEALTHCHECK and any API probe send no Accept header and must
+    # keep getting JSON. A real browser asks for text/html -> send it onwards.
+    if "text/html" in (request.headers.get("Accept") or ""):
+        return redirect(f"{PORTAL}/devices")
     return {"ok": True}
 
 
@@ -202,6 +206,9 @@ def staff_page():
     orig = request.args.get("orig", "http://gadingkonseling.org")
     if not ip or not is_staff_client(ip):
         abort(403, "This login page is only for the staff network")
+    # Already connected on this device? Skip the login page entirely.
+    if current_staff_user():
+        return redirect(f"{PORTAL}/devices")
     return render_template(
         "landing.html",
         ip=ip,
@@ -375,11 +382,43 @@ def _sessions_for(username):
 
 
 def current_staff_user():
-    """Casdoor username established by a recent hotspot login in this browser."""
+    """Who is browsing.
+
+    Portal session first (set at SSO login), then fall back to the hotspot
+    session that owns this browser's IP. The fallback matters because the
+    hotspot often opens its login page in an in-app WebView: the cookies live
+    in a different jar from the browser the user later opens /devices in.
+    """
     user = session.get("staff_user", "")
-    if not user or time.time() > float(session.get("staff_exp", 0) or 0):
+    if user and time.time() <= float(session.get("staff_exp", 0) or 0):
+        return user
+    return _user_for_ip(_client_ip())
+
+
+def _client_ip():
+    """Client IP as seen through Caddy.
+
+    Caddy sets X-Forwarded-For; take the LAST entry, since that is the value
+    our own proxy appended and cannot be spoofed by the client.
+    """
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
+    return request.remote_addr or ""
+
+
+def _user_for_ip(ip):
+    """Hotspot username currently logged in from `ip` ("" if none)."""
+    if not ip:
         return ""
-    return user
+    try:
+        for a in router_get("ip/hotspot/active", address=ip):
+            return str(a.get("user", ""))
+    except Exception:
+        app.logger.exception("active lookup failed for %s", ip)
+    return ""
 
 
 @app.get("/devices")
