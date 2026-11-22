@@ -17,6 +17,8 @@ Env (see docker-compose.yml)
   LOGO_URL, BRAND_NAME, SUPPORT_URL, TERMS_URL
 """
 
+import hashlib
+import hmac
 import os
 import secrets
 import time
@@ -73,6 +75,35 @@ app.config.update(
     SESSION_COOKIE_NAME="wifi_portal_state",
 )
 STATE_TTL = 600     # seconds a pending login stays valid
+
+# --- abuse control ---------------------------------------------------------
+# /devices/logout talks to the router, so an authenticated client could hammer
+# it and degrade the hotspot. Count actions per account and per source IP.
+ACTION_WINDOW = 60
+ACTION_LIMIT = 8
+_ACTION_LOG = {}
+
+
+def _rate_limited(identity):
+    """True when `identity` has exceeded ACTION_LIMIT actions in the window."""
+    now = time.time()
+    start, count = _ACTION_LOG.get(identity, (now, 0))
+    if now - start > ACTION_WINDOW:
+        start, count = now, 0
+    count += 1
+    _ACTION_LOG[identity] = (start, count)
+    return count > ACTION_LIMIT
+
+
+def _device_token(mac):
+    """Opaque, unforgeable handle for a device MAC.
+
+    The page must never expose a MAC that a client could replay, so the form
+    posts this HMAC instead. It is derived from the portal secret, so a client
+    cannot mint a token for a MAC it does not own.
+    """
+    key = (os.environ.get("PORTAL_SECRET") or CLIENT_SECRET).encode()
+    return hmac.new(key, mac.encode(), hashlib.sha256).hexdigest()[:32]
 
 
 @app.after_request
@@ -428,6 +459,7 @@ def _sessions_for(username, viewer_mac=""):
             {
                 "user": a.get("user", ""),
                 "address": a.get("address", ""),
+                "token": _device_token(mac),
                 "mac": mac,
                 "device": names.get(mac, ""),
                 "uptime": _fmt_uptime(a.get("uptime", "")),
@@ -498,22 +530,46 @@ def devices_logout():
     user = current_staff_user()
     if not user:
         abort(403, "silakan masuk dengan SSO terlebih dahulu")
-    mac = _mac_ok(request.form.get("mac", ""))
+
+    ip = _client_ip()
+    if _rate_limited("user:" + user.lower()) or _rate_limited("ip:" + ip):
+        app.logger.warning("logout rate limited user=%s ip=%s", user, ip)
+        abort(429, "terlalu banyak permintaan, tunggu sebentar")
+
+    # Only an opaque token is accepted -- never a raw MAC -- and it is resolved
+    # against THIS account's own devices, so one user can never disconnect
+    # another user's device even by crafting the POST body.
+    token = (request.form.get("token") or "").strip()
+    mac = ""
+    if token:
+        for r in _sessions_for(user):
+            if hmac.compare_digest(r["token"], token):
+                mac = r["mac"]
+                break
     if not mac:
-        abort(400, "a valid mac is required")
-    # never let one account disconnect another account's device
-    if mac not in {r["mac"] for r in _sessions_for(user)}:
         abort(403, "perangkat itu bukan milik akun Anda")
+
     try:
-        # drop the live session, then the cookie so it cannot silently auto-login
+        removed = 0
         for a in router_get("ip/hotspot/active", **{"mac-address": mac}):
             router_post("ip/hotspot/active/remove", {".id": a[".id"]})
-        for c in router_get("ip/hotspot/cookie", **{"mac-address": mac}):
+            removed += 1
+        # login-by=cookie would silently re-add the session on the very next
+        # request, so the cookie has to go too or the device looks unremovable.
+        cookies = router_get("ip/hotspot/cookie", **{"mac-address": mac})
+        for c in cookies:
             router_post("ip/hotspot/cookie/remove", {".id": c[".id"]})
+        still = router_get("ip/hotspot/active", **{"mac-address": mac})
     except Exception:
-        app.logger.exception("device logout failed for %s", mac)
+        app.logger.exception("device logout failed user=%s", user)
         abort(502, "router refused the logout")
-    app.logger.info("device logout user=%s mac=%s", user, mac)
+
+    app.logger.info(
+        "device logout user=%s sessions=%d cookies=%d still_active=%d",
+        user, removed, len(cookies), len(still),
+    )
+    if still:
+        abort(502, "sesi masih aktif, coba sekali lagi")
     return redirect(f"{PORTAL}/devices")
 
 

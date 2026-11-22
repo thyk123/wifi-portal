@@ -90,7 +90,7 @@
       </div>
       <form method="post" action="{{ url_for('devices_logout') }}"
             onsubmit="return confirm('Putuskan {{ r.device or 'perangkat ini' }}?');">
-        <input type="hidden" name="mac" value="{{ r.mac }}">
+        <input type="hidden" name="token" value="{{ r.token }}">
         <button type="submit">Putuskan</button>
       </form>
     </div>
