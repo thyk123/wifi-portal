@@ -1,0 +1,78 @@
+<!--
+  CHAP auto-login bridge. Served BY the MikroTik hotspot so that $(chap-id)
+  and $(chap-challenge) are expanded per client.
+
+  Upload to: hotspot-staff/bridge.html   (the html-directory of hs-staff)
+
+  Credentials arrive in the URL fragment (#u=..&p=..). Fragments are never sent
+  to a server, so the password does not appear in the router's logs; the hash is
+  computed here and only the hash is posted. The fragment is wiped from the
+  address bar immediately afterwards.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Masuk&hellip;</title>
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+       font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#43160D;
+       background:radial-gradient(900px 400px at 20% -10%,rgba(244,211,13,.22),transparent 60%),#FDFBF7;
+       padding:24px;text-align:center}
+  .box{max-width:320px}
+  .dot{width:34px;height:34px;margin:0 auto 14px;border-radius:50%;
+       border:3px solid rgba(67,22,13,.15);border-top-color:#F4D30D;
+       animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  p{font-size:13.5px;line-height:1.6;color:#7D3830;margin:0}
+</style>
+<script src="md5.js"></script>
+</head>
+<body>
+  <div class="box">
+    <div class="dot" aria-hidden="true"></div>
+    <p>Memproses masuk&hellip;</p>
+    <noscript><p>JavaScript wajib aktif untuk menyelesaikan proses masuk.</p></noscript>
+  </div>
+
+  <form name="sendin" method="post" action="$(link-login-only)" style="display:none">
+    <input type="hidden" name="username" value="">
+    <input type="hidden" name="password" value="">
+    <input type="hidden" name="dst" value="$(link-orig-esc)">
+    <input type="hidden" name="popup" value="false">
+  </form>
+
+<script>
+(function () {
+  var raw = location.hash.replace(/^#/, "");
+  var f = document.forms.sendin;
+
+  // wipe credentials from the address bar before anything else can leak them
+  try { history.replaceState(null, "", location.pathname); } catch (e) {}
+
+  var u = "", p = "", d = "";
+  raw.split("&").forEach(function (kv) {
+    var i = kv.indexOf("=");
+    if (i < 0) return;
+    var k = decodeURIComponent(kv.slice(0, i));
+    var v = decodeURIComponent(kv.slice(i + 1));
+    if (k === "u") u = v;
+    if (k === "p") p = v;
+    if (k === "d") d = v;
+  });
+
+  if (!u || !p) {
+    document.body.innerHTML = '<div class="box"><p>Parameter masuk tidak lengkap. ' +
+      'Silakan kembali ke halaman login Wi-Fi.</p></div>';
+    return;
+  }
+
+  // CHAP: only the digest leaves the device, never the password
+  f.username.value = u;
+  f.password.value = hexMD5("$(chap-id)" + p + "$(chap-challenge)");
+  if (d) f.dst.value = d;
+  f.submit();
+}());
+</script>
+</body>
+</html>

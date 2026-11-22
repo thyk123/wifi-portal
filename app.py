@@ -54,6 +54,12 @@ STAFF_HOTSPOT = os.environ.get("STAFF_HOTSPOT", "hs-staff")
 # Where the browser posts the login form. Use https://hotspot.<domain>/login
 # once the router has a cert for that name (see plan §2.11).
 STAFF_LOGIN_URL = os.environ.get("STAFF_LOGIN_URL", f"http://{STAFF_GW}/login")
+# chap -> the password never crosses the Wi-Fi link: the browser posts an MD5
+#         digest from the router-hosted bridge page (router/bridge-chap.html).
+# pap  -> the portal posts the plaintext password to the hotspot (old behaviour,
+#         keep as an emergency fallback).
+LOGIN_MODE = os.environ.get("STAFF_LOGIN_MODE", "chap").strip().lower()
+CHAP_BRIDGE_URL = os.environ.get("CHAP_BRIDGE_URL", f"http://{STAFF_GW}/bridge.html")
 
 BRAND = {
     "name": os.environ.get("BRAND_NAME", "Gading Counseling & Empowerment Center"),
@@ -334,6 +340,18 @@ def callback():
     # Remember who logged in, so /devices can show only THIS account's devices.
     session["staff_user"] = username
     session["staff_exp"] = time.time() + 8 * 3600
+
+    if LOGIN_MODE == "chap":
+        # Credentials travel in the URL *fragment*: never sent to a server, so
+        # they cannot end up in router logs; the page hashes and wipes them.
+        # quote_via=quote keeps spaces as %20 -- urlencode's default '+' would
+        # survive decodeURIComponent in the browser and corrupt dst.
+        q = urllib.parse.urlencode(
+            {"u": username, "p": password, "d": data.get("orig", "")},
+            quote_via=urllib.parse.quote,
+        )
+        return redirect(f"{CHAP_BRIDGE_URL}#{q}")
+
     return render_template(
         "bridge.html",
         username=username,

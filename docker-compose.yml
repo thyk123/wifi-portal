@@ -22,12 +22,14 @@ services:
       STAFF_GW: ${STAFF_GW:-10.77.10.1}
       STAFF_HOTSPOT: ${STAFF_HOTSPOT:-hs-staff}
       STAFF_LOGIN_URL: ${STAFF_LOGIN_URL:-http://10.77.10.1/login}
+      STAFF_LOGIN_MODE: ${STAFF_LOGIN_MODE:-chap}
+      CHAP_BRIDGE_URL: ${CHAP_BRIDGE_URL:-http://10.77.10.1/bridge.html}
       BRAND_NAME: ${BRAND_NAME:-Gading Counseling & Empowerment Center}
       LOGO_URL: ${LOGO_URL:-}
       SUPPORT_URL: ${SUPPORT_URL:-https://gadingkonseling.org}
       TERMS_URL: ${TERMS_URL:-https://gadingkonseling.org/kebijakan-privasi}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8585/health').read()"]
+http      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8585/health').read()"]
       interval: 30s
       timeout: 5s
       start_period: 10s
