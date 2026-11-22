@@ -29,7 +29,12 @@ SSO = os.environ["SSO_URL"].rstrip("/")
 CLIENT_ID = os.environ["CASDOOR_CLIENT_ID"]
 CLIENT_SECRET = os.environ["CASDOOR_CLIENT_SECRET"]
 PORTAL = os.environ["PORTAL_URL"].rstrip("/")
-ROUTER = os.environ["ROUTER_URL"].rstrip("/")
+ROUTER = os.environ["ROUTER_URL"].strip().rstrip("/")
+# The REST helpers below already prepend "/rest". If ROUTER_URL is given as
+# https://router/rest the request becomes /rest/rest/... and RouterOS answers
+# 400 {"detail":"no such command"}. Accept either form.
+if ROUTER.endswith("/rest"):
+    ROUTER = ROUTER[: -len("/rest")]
 R_USER = os.environ["ROUTER_USER"]
 R_PASS = os.environ["ROUTER_PASS"]
 
@@ -102,7 +107,7 @@ def router_post(path, payload):
     if r.status_code >= 400:
         safe = {k: (v if k != "password" else "***") for k, v in payload.items()}
         raise RuntimeError(
-            f"router POST {path} -> {r.status_code}: {r.text[:300]} payload={safe}"
+            f"router POST {r.url} -> {r.status_code}: {r.text[:300]} payload={safe}"
         )
     return r.json() if r.text else {}
 
@@ -147,8 +152,10 @@ def ensure_user(name, password, profile):
             {"password": password, "profile": profile, "comment": "wifi-portal"},
         )
     else:
+        # RouterOS 7.19 rejects POST on the collection path ("no such command");
+        # the explicit /add command is the form that works.
         router_post(
-            "ip/hotspot/user",
+            "ip/hotspot/user/add",
             {
                 "name": name,
                 "password": password,
@@ -256,7 +263,14 @@ def callback():
         abort(400, "Casdoor returned no username")
 
     password = secrets.token_urlsafe(18)
-    ensure_user(username, password, "profile-staff")
+    try:
+        ensure_user(username, password, "profile-staff")
+    except Exception:
+        # Never 500 the browser here: the OIDC state has already been consumed,
+        # so a 500 leaves the user stuck on "expired login" forever. Send them
+        # back to the login page with a retryable error instead.
+        app.logger.exception("hotspot provisioning failed for %r", username)
+        return redirect(f"{PORTAL}/hotspot?err=router", code=302)
     return render_template(
         "bridge.html",
         username=username,
