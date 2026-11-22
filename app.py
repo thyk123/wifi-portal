@@ -251,8 +251,10 @@ def staff_page():
     orig = request.args.get("orig", "http://gadingkonseling.org")
     if not ip or not is_staff_client(ip):
         abort(403, "This login page is only for the staff network")
-    # Already connected on this device? Skip the login page entirely.
-    if current_staff_user():
+    # Skip the login page only if the router really has a session for this
+    # device. A stale portal cookie must NOT count: otherwise the captive
+    # portal bounces to /devices and the hotspot login never happens at all.
+    if _user_for_ip(_client_ip()):
         return redirect(f"{PORTAL}/devices")
     return render_template(
         "landing.html",
@@ -536,12 +538,15 @@ def _user_for_ip(ip):
 
 @app.get("/devices")
 def devices_page():
-    user = current_staff_user()
+    # "Connected" means the router has an active session for this device -- not
+    # merely that this browser once completed SSO.
+    user = _user_for_ip(_client_ip())
+    ip = request.args.get("ip") or _client_ip()
     return render_template(
         "devices.html",
         user=user,
         rows=_sessions_for(user, _viewer_mac()) if user else [],
-        ip=request.args.get("ip", ""),
+        ip=ip,
         mac=request.args.get("mac", ""),
         orig=request.args.get("orig", ""),
         brand=BRAND,
@@ -550,9 +555,11 @@ def devices_page():
 
 @app.post("/devices/logout")
 def devices_logout():
-    user = current_staff_user()
+    # Disconnecting requires a real session on THIS device; a stale portal
+    # cookie is not enough to act on the router.
+    user = _user_for_ip(_client_ip())
     if not user:
-        abort(403, "silakan masuk dengan SSO terlebih dahulu")
+        abort(403, "perangkat ini belum terhubung ke Wi-Fi")
 
     ip = _client_ip()
     if _rate_limited("user:" + user.lower()) or _rate_limited("ip:" + ip):
