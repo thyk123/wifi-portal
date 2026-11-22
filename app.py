@@ -518,6 +518,9 @@ def _sessions_for(username, viewer_mac=""):
                 "uptime": _fmt_uptime(a.get("uptime", "")),
                 "down": down,
                 "up": up,
+                # cumulative traffic actually used in this session
+                "rx": _human_bytes(a.get("bytes-in", 0)),
+                "tx": _human_bytes(a.get("bytes-out", 0)),
                 "current": bool(viewer_mac) and mac == viewer_mac,
             }
         )

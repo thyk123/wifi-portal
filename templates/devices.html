@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#43160D">
 <meta name="robots" content="noindex">
+<!-- traffic counters move constantly; keep the numbers fresh -->
+<meta http-equiv="refresh" content="300">
 <title>Perangkat Saya &middot; {{ brand.name }}</title>
 <style>
   :root{--ink:#43160D;--muted:#7D3830;--accent:#F4D30D;--line:#EADFD5;--bg:#FDFBF7}
@@ -87,6 +89,7 @@
         <div class="stats">
           {% if r.down or r.up %}{{ r.down }} &#8595; / {{ r.up }} &#8593; &middot; {% endif %}Terhubung {{ r.uptime }}
         </div>
+        <div class="stats">Pemakaian {{ r.rx }} &#8595; / {{ r.tx }} &#8593;</div>
       </div>
       <form method="post" action="{{ url_for('devices_logout') }}"
             onsubmit="return confirm('Putuskan {{ r.device or 'perangkat ini' }}?');">
