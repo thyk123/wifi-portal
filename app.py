@@ -220,7 +220,11 @@ def ensure_user(name, password, profile, mac="", server=STAFF_HOTSPOT):
         payload["server"] = server
     mac = _mac_ok(mac)
     if mac:
-        payload["mac-address"] = mac
+        # NOTE: deliberately NOT setting mac-address on the user record.
+        # RouterOS allows only one MAC per user, so binding it would break the
+        # second device of the same person (and fight with shared-users). The
+        # MAC is kept in the comment for auditing instead.
+        payload["comment"] = f"wifi-portal {mac}"
     app.logger.info(
         "ensure_user name=%r profile=%s server=%s mac=%s", name, profile, server, mac or "-"
     )
