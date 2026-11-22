@@ -357,13 +357,67 @@ def _fmt_uptime(u):
     return " ".join(out[:2]) or str(u)
 
 
-def _sessions_for(username):
+def _viewer_mac():
+    """MAC of the device browsing this page, taken from its hotspot session."""
+    ip = _client_ip()
+    if not ip:
+        return ""
+    try:
+        for a in router_get("ip/hotspot/active", address=ip):
+            return str(a.get("mac-address", "")).lower()
+    except Exception:
+        app.logger.exception("viewer lookup failed for %s", ip)
+    return ""
+
+
+def _profile_rates():
+    """Hotspot profile name -> rate-limit string, e.g. {'profile-staff': '20M/20M'}."""
+    try:
+        return {
+            p.get("name", ""): p.get("rate-limit", "")
+            for p in router_get("ip/hotspot/user/profile")
+        }
+    except Exception:
+        app.logger.exception("cannot read hotspot profiles")
+        return {}
+
+
+def _fmt_rate(rate):
+    """'20M/20M' -> ('20 Mbps', '20 Mbps'). Empty strings when unlimited."""
+    if not rate or "/" not in rate:
+        return "", ""
+    down, up = rate.split("/", 1)
+
+    def one(v):
+        v = v.strip().upper()
+        if not v or v.strip("0") == "":
+            return ""
+        for suffix, unit in (("K", "Kbps"), ("M", "Mbps"), ("G", "Gbps")):
+            if v.endswith(suffix):
+                return f"{v[:-1]} {unit}"
+        return v
+
+    return one(down), one(up)
+
+
+def _sessions_for(username, viewer_mac=""):
     """Active staff hotspot sessions belonging to `username` (case-insensitive)."""
     try:
         active = router_get("ip/hotspot/active", **{"server": STAFF_HOTSPOT})
     except Exception:
         app.logger.exception("cannot read hotspot active")
         return []
+
+    # rate limit comes from the account's profile, not from the session
+    profile = ""
+    try:
+        users = router_get("ip/hotspot/user", name=username)
+        if users:
+            profile = users[0].get("profile", "")
+    except Exception:
+        app.logger.exception("cannot read hotspot user %r", username)
+    down, up = _fmt_rate(_profile_rates().get(profile, ""))
+
     names = _device_names()
     out = []
     for a in active:
@@ -377,8 +431,9 @@ def _sessions_for(username):
                 "mac": mac,
                 "device": names.get(mac, ""),
                 "uptime": _fmt_uptime(a.get("uptime", "")),
-                "rx": _human_bytes(a.get("bytes-in", 0)),
-                "tx": _human_bytes(a.get("bytes-out", 0)),
+                "down": down,
+                "up": up,
+                "current": bool(viewer_mac) and mac == viewer_mac,
             }
         )
     return out
@@ -430,7 +485,7 @@ def devices_page():
     return render_template(
         "devices.html",
         user=user,
-        rows=_sessions_for(user) if user else [],
+        rows=_sessions_for(user, _viewer_mac()) if user else [],
         ip=request.args.get("ip", ""),
         mac=request.args.get("mac", ""),
         orig=request.args.get("orig", ""),
