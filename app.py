@@ -646,6 +646,31 @@ def devices_logout():
 
     was_current = mac == _viewer_mac()
 
+    # Short, self-clearing block. Without it, a device that is actively browsing
+    # re-authenticates from its hotspot cookie the instant the session is removed,
+    # so "Putuskan" appears to do nothing. The block is removed by a router
+    # scheduler ~2 minutes later, so the device can log in again afterwards.
+    mid = mac.replace(":", "")
+    kick_comment = f"portal-kick-{mac}"
+    blocked = False
+    if not was_current:
+        try:
+            for b in router_get("ip/hotspot/ip-binding", **{"mac-address": mac}):
+                if str(b.get("comment", "")).startswith("portal-kick-"):
+                    router_post("ip/hotspot/ip-binding/remove", {".id": b[".id"]})
+            router_post(
+                "ip/hotspot/ip-binding/add",
+                {
+                    "mac-address": mac,
+                    "type": "blocked",
+                    "server": STAFF_HOTSPOT,
+                    "comment": kick_comment,
+                },
+            )
+            blocked = True
+        except Exception:
+            app.logger.exception("could not block %s before kicking", mac)
+
     # Cookies go FIRST. With login-by=cookie the router re-creates the session
     # on the very next request, so deleting the session first just races.
     removed = {"cookies": 0, "sessions": 0}
@@ -665,9 +690,30 @@ def devices_logout():
         app.logger.exception("device logout failed user=%s", user)
         abort(502, "router refused the logout")
 
+    # one-shot cleanup: drop the block so the device is not locked out for good
+    if blocked:
+        try:
+            for s in router_get("system/scheduler", name=f"kick-{mid}"):
+                router_post("system/scheduler/remove", {".id": s[".id"]})
+            router_post(
+                "system/scheduler/add",
+                {
+                    "name": f"kick-{mid}",
+                    "interval": "2m",
+                    "start-time": "00:00:00",
+                    "comment": "wifi-portal kick",
+                    "on-event": (
+                        f'/ip hotspot ip-binding remove [find where comment="{kick_comment}"]; '
+                        f'/system/scheduler remove [find where name="kick-{mid}"]'
+                    ),
+                },
+            )
+        except Exception:
+            app.logger.exception("could not schedule unblock for %s", mac)
+
     app.logger.info(
-        "device logout user=%s sessions=%d cookies=%d remaining_active=%d remaining_cookies=%d",
-        user, removed["sessions"], removed["cookies"], len(still), len(left),
+        "device logout user=%s sessions=%d cookies=%d blocked=%s remaining_active=%d remaining_cookies=%d",
+        user, removed["sessions"], removed["cookies"], blocked, len(still), len(left),
     )
     if still or left:
         abort(502, "sesi masih aktif, coba sekali lagi")
