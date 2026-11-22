@@ -549,27 +549,40 @@ def devices_logout():
     if not mac:
         abort(403, "perangkat itu bukan milik akun Anda")
 
+    was_current = mac == _viewer_mac()
+
+    # Cookies go FIRST. With login-by=cookie the router re-creates the session
+    # on the very next request, so deleting the session first just races.
+    removed = {"cookies": 0, "sessions": 0}
     try:
-        removed = 0
-        for a in router_get("ip/hotspot/active", **{"mac-address": mac}):
-            router_post("ip/hotspot/active/remove", {".id": a[".id"]})
-            removed += 1
-        # login-by=cookie would silently re-add the session on the very next
-        # request, so the cookie has to go too or the device looks unremovable.
-        cookies = router_get("ip/hotspot/cookie", **{"mac-address": mac})
-        for c in cookies:
-            router_post("ip/hotspot/cookie/remove", {".id": c[".id"]})
-        still = router_get("ip/hotspot/active", **{"mac-address": mac})
+        for _ in range(3):
+            for c in router_get("ip/hotspot/cookie", **{"mac-address": mac}):
+                router_post("ip/hotspot/cookie/remove", {".id": c[".id"]})
+                removed["cookies"] += 1
+            for a in router_get("ip/hotspot/active", **{"mac-address": mac}):
+                router_post("ip/hotspot/active/remove", {".id": a[".id"]})
+                removed["sessions"] += 1
+            still = router_get("ip/hotspot/active", **{"mac-address": mac})
+            left = router_get("ip/hotspot/cookie", **{"mac-address": mac})
+            if not still and not left:
+                break
     except Exception:
         app.logger.exception("device logout failed user=%s", user)
         abort(502, "router refused the logout")
 
     app.logger.info(
-        "device logout user=%s sessions=%d cookies=%d still_active=%d",
-        user, removed, len(cookies), len(still),
+        "device logout user=%s sessions=%d cookies=%d remaining_active=%d remaining_cookies=%d",
+        user, removed["sessions"], removed["cookies"], len(still), len(left),
     )
-    if still:
+    if still or left:
         abort(502, "sesi masih aktif, coba sekali lagi")
+
+    if was_current:
+        # This device just lost its own session: forget the portal identity and
+        # send the browser back to the hotspot login page, like MikroTik does.
+        session.pop("staff_user", None)
+        session.pop("staff_exp", None)
+        return redirect(STAFF_LOGIN_URL)
     return redirect(f"{PORTAL}/devices")
 
 
