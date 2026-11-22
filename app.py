@@ -289,6 +289,10 @@ def callback():
         # back to the login page with a retryable error instead.
         app.logger.exception("hotspot provisioning failed for %r", username)
         return redirect(f"{PORTAL}/hotspot?err=router", code=302)
+
+    # Remember who logged in, so /devices can show only THIS account's devices.
+    session["staff_user"] = username
+    session["staff_exp"] = time.time() + 8 * 3600
     return render_template(
         "bridge.html",
         username=username,
@@ -343,37 +347,20 @@ def _fmt_uptime(u):
     return " ".join(out[:2]) or str(u)
 
 
-def admin_guard():
-    """None if authorised, else the 401/503 response to return."""
-    user = os.environ.get("ADMIN_USER", "")
-    pwd = os.environ.get("ADMIN_PASS", "")
-    if not user or not pwd:
-        abort(503, "admin page not configured: set ADMIN_USER and ADMIN_PASS")
-    a = request.authorization
-    if not a or a.username != user or a.password != pwd:
-        return app.response_class(
-            "authentication required",
-            status=401,
-            headers={"WWW-Authenticate": 'Basic realm="wifi-portal", charset="UTF-8"'},
-        )
-    return None
-
-
-@app.get("/clients")
-def clients_page():
-    guard = admin_guard()
-    if guard:
-        return guard
+def _sessions_for(username):
+    """Active staff hotspot sessions belonging to `username` (case-insensitive)."""
     try:
         active = router_get("ip/hotspot/active", **{"server": STAFF_HOTSPOT})
     except Exception:
         app.logger.exception("cannot read hotspot active")
-        active = []
+        return []
     names = _device_names()
-    rows = []
+    out = []
     for a in active:
+        if str(a.get("user", "")).lower() != username.lower():
+            continue
         mac = str(a.get("mac-address", "")).lower()
-        rows.append(
+        out.append(
             {
                 "user": a.get("user", ""),
                 "address": a.get("address", ""),
@@ -384,29 +371,59 @@ def clients_page():
                 "tx": _human_bytes(a.get("bytes-out", 0)),
             }
         )
-    rows.sort(key=lambda r: r["user"].lower())
-    return render_template("clients.html", rows=rows, brand=BRAND)
+    return out
 
 
-@app.post("/clients/logout")
-def clients_logout():
-    guard = admin_guard()
-    if guard:
-        return guard
+def current_staff_user():
+    """Casdoor username established by a recent hotspot login in this browser."""
+    user = session.get("staff_user", "")
+    if not user or time.time() > float(session.get("staff_exp", 0) or 0):
+        return ""
+    return user
+
+
+@app.get("/devices")
+def devices_page():
+    user = current_staff_user()
+    return render_template(
+        "devices.html",
+        user=user,
+        rows=_sessions_for(user) if user else [],
+        ip=request.args.get("ip", ""),
+        mac=request.args.get("mac", ""),
+        orig=request.args.get("orig", ""),
+        brand=BRAND,
+    )
+
+
+@app.post("/devices/logout")
+def devices_logout():
+    user = current_staff_user()
+    if not user:
+        abort(403, "silakan masuk dengan SSO terlebih dahulu")
     mac = _mac_ok(request.form.get("mac", ""))
     if not mac:
         abort(400, "a valid mac is required")
+    # never let one account disconnect another account's device
+    if mac not in {r["mac"] for r in _sessions_for(user)}:
+        abort(403, "perangkat itu bukan milik akun Anda")
     try:
-        # drop the live session, then the cookie so the device cannot auto-login
+        # drop the live session, then the cookie so it cannot silently auto-login
         for a in router_get("ip/hotspot/active", **{"mac-address": mac}):
             router_post("ip/hotspot/active/remove", {".id": a[".id"]})
         for c in router_get("ip/hotspot/cookie", **{"mac-address": mac}):
             router_post("ip/hotspot/cookie/remove", {".id": c[".id"]})
     except Exception:
-        app.logger.exception("logout failed for %s", mac)
+        app.logger.exception("device logout failed for %s", mac)
         abort(502, "router refused the logout")
-    app.logger.info("logout mac=%s", mac)
-    return redirect(f"{PORTAL}/clients")
+    app.logger.info("device logout user=%s mac=%s", user, mac)
+    return redirect(f"{PORTAL}/devices")
+
+
+@app.get("/clients")
+def clients_redirect():
+    """The old admin URL now points at the self-service device page."""
+    return redirect(f"{PORTAL}/devices")
 
 
 if __name__ == "__main__":
