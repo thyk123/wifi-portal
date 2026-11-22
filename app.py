@@ -68,6 +68,11 @@ STAFF_LOGIN_URL = os.environ.get("STAFF_LOGIN_URL", f"http://{STAFF_GW}/login")
 #   chap -> hash in the browser on a router-hosted page; password never crosses
 #           the Wi-Fi link, but needs hotspot-staff/bridge.html and a test.
 LOGIN_MODE = os.environ.get("STAFF_LOGIN_MODE", "get").strip().lower()
+# Where the hotspot sends the browser AFTER a successful login. Defaults to the
+# portal's device page: Windows/Android often open a captive-portal window whose
+# "original URL" is something like msn.com, and the hotspot would then dump the
+# user there instead of somewhere useful.
+POST_LOGIN_URL = os.environ.get("POST_LOGIN_URL", f"{PORTAL}/devices")
 CHAP_BRIDGE_URL = os.environ.get("CHAP_BRIDGE_URL", f"http://{STAFF_GW}/bridge.html")
 
 BRAND = {
@@ -407,7 +412,10 @@ def callback():
             {
                 "username": username,
                 "password": password,
-                "dst": data.get("orig", ""),
+                # not data["orig"]: a captive-portal window reports whatever the
+                # OS was loading (msn.com on Windows), which is a confusing place
+                # to land after a Wi-Fi login.
+                "dst": POST_LOGIN_URL,
             },
             quote_via=urllib.parse.quote,
         )
