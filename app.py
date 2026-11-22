@@ -178,10 +178,20 @@ def hotspot_server(ip):
 
 
 def is_staff_client(ip):
+    """True when the client is on the staff VLAN.
+
+    The IP prefix is authoritative: VLAN 100 hands out STAFF_PREFIX addresses
+    and the guest VLAN hands out a different range. The hotspot server name is
+    only a secondary signal, because it depends on the STAFF_HOTSPOT env var
+    matching the router's server name exactly -- a mismatch there used to
+    reject real staff clients with a bare 403.
+    """
+    if not ip:
+        return False
+    if ip.startswith(STAFF_PREFIX):
+        return True
     server = hotspot_server(ip)
-    if server:
-        return server == STAFF_HOTSPOT
-    return ip.startswith(STAFF_PREFIX)
+    return bool(server) and server == STAFF_HOTSPOT
 
 
 def _mac_ok(mac):
@@ -217,8 +227,11 @@ def ensure_user(name, password, profile, mac="", server=STAFF_HOTSPOT):
     existing = router_get("ip/hotspot/user", name=name)
     payload["name"] = name
     if existing:
-        uid = urllib.parse.quote(existing[0][".id"])
-        router_patch(f"ip/hotspot/user/{uid}", payload)
+        # RouterOS 7.19 answers HTTP 500 when the .id in the path is
+        # percent-encoded ("*8" -> "%2A8"), so use the command form with the
+        # id in the body instead of PATCH /rest/ip/hotspot/user/<id>.
+        payload[".id"] = existing[0][".id"]
+        router_post("ip/hotspot/user/set", payload)
     else:
         # RouterOS 7.19 rejects POST on the collection path ("no such command");
         # the explicit /add command is the form that works.
@@ -302,6 +315,10 @@ def callback():
     if not data or data.get("state") != state or data["exp"] < time.time():
         abort(400, "expired login, please reconnect to the Wi-Fi")
     if not is_staff_client(data["ip"]):
+        app.logger.warning(
+            "callback rejected: ip=%r staff_prefix=%r hotspot_server=%r expected=%r",
+            data.get("ip"), STAFF_PREFIX, hotspot_server(data.get("ip", "")), STAFF_HOTSPOT,
+        )
         abort(403, "network mismatch, please reconnect to the staff Wi-Fi")
 
     cfg = oidc_config()
@@ -342,7 +359,18 @@ def callback():
         # so a 500 leaves the user stuck on "expired login" forever. Send them
         # back to the login page with a retryable error instead.
         app.logger.exception("hotspot provisioning failed for %r", username)
-        return redirect(f"{PORTAL}/hotspot?err=router", code=302)
+        # Keep ip/mac so the retry target is still a valid staff login page;
+        # dropping them made /hotspot answer 403 instead of a usable page.
+        q = urllib.parse.urlencode(
+            {
+                "ip": data.get("ip", ""),
+                "mac": data.get("mac", ""),
+                "orig": data.get("orig", ""),
+                "err": "router",
+            },
+            quote_via=urllib.parse.quote,
+        )
+        return redirect(f"{PORTAL}/hotspot?{q}", code=302)
 
     # Remember who logged in, so /devices can show only THIS account's devices.
     session["staff_user"] = username
