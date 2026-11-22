@@ -142,27 +142,45 @@ def is_staff_client(ip):
     return ip.startswith(STAFF_PREFIX)
 
 
-def ensure_user(name, password, profile):
-    app.logger.info("ensure_user name=%r profile=%s", name, profile)
+def _mac_ok(mac):
+    """Return a normalised aa:bb:cc:dd:ee:ff MAC, or "" if it is not one."""
+    mac = (mac or "").strip().lower()
+    parts = mac.split(":")
+    if len(parts) != 6:
+        return ""
+    if not all(len(p) == 2 and all(c in "0123456789abcdef" for c in p) for p in parts):
+        return ""
+    return mac
+
+
+def ensure_user(name, password, profile, mac="", server=STAFF_HOTSPOT):
+    """Create or update the hotspot user.
+
+    server=hs-staff pins the account to the STAFF hotspot. Without it RouterOS
+    leaves the user attached to every hotspot server, so a staff credential
+    would also be accepted on the guest hotspot.
+
+    mac-address binds the account to the device that actually logged in, so the
+    generated password cannot be reused from another machine.
+    """
+    payload = {"password": password, "profile": profile, "comment": "wifi-portal"}
+    if server:
+        payload["server"] = server
+    mac = _mac_ok(mac)
+    if mac:
+        payload["mac-address"] = mac
+    app.logger.info(
+        "ensure_user name=%r profile=%s server=%s mac=%s", name, profile, server, mac or "-"
+    )
     existing = router_get("ip/hotspot/user", name=name)
+    payload["name"] = name
     if existing:
         uid = urllib.parse.quote(existing[0][".id"])
-        router_patch(
-            f"ip/hotspot/user/{uid}",
-            {"password": password, "profile": profile, "comment": "wifi-portal"},
-        )
+        router_patch(f"ip/hotspot/user/{uid}", payload)
     else:
         # RouterOS 7.19 rejects POST on the collection path ("no such command");
         # the explicit /add command is the form that works.
-        router_post(
-            "ip/hotspot/user/add",
-            {
-                "name": name,
-                "password": password,
-                "profile": profile,
-                "comment": "wifi-portal",
-            },
-        )
+        router_post("ip/hotspot/user/add", payload)
 
 
 def oidc_config():
@@ -264,7 +282,7 @@ def callback():
 
     password = secrets.token_urlsafe(18)
     try:
-        ensure_user(username, password, "profile-staff")
+        ensure_user(username, password, "profile-staff", mac=data.get("mac", ""))
     except Exception:
         # Never 500 the browser here: the OIDC state has already been consumed,
         # so a 500 leaves the user stuck on "expired login" forever. Send them
@@ -279,6 +297,116 @@ def callback():
         login_url=STAFF_LOGIN_URL,
         brand=BRAND,
     )
+
+
+# ------------------------------------------------------------------- clients
+def _device_names():
+    """Map lower-case MAC -> DHCP lease hostname (device name)."""
+    try:
+        leases = router_get("ip/dhcp-server/lease")
+    except Exception:
+        app.logger.exception("cannot read dhcp leases")
+        return {}
+    out = {}
+    for l in leases:
+        mac = str(l.get("mac-address", "")).lower()
+        name = l.get("host-name") or l.get("comment") or ""
+        if mac and name:
+            out[mac] = name
+    return out
+
+
+def _human_bytes(v):
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        return "-"
+    for unit in ("B", "K", "M", "G"):
+        if n < 1024:
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} T"
+
+
+def _fmt_uptime(u):
+    """RouterOS uptime like 1w2d3h4m5s -> '1d 3h 4m'."""
+    if not u:
+        return "-"
+    out, num = [], ""
+    for ch in str(u):
+        if ch.isdigit():
+            num += ch
+        elif ch in "wdhms":
+            if ch in "dh" and num:
+                out.append(f"{num}{'d' if ch == 'd' else 'h'}")
+            num = ""
+    return " ".join(out[:2]) or str(u)
+
+
+def admin_guard():
+    """None if authorised, else the 401/503 response to return."""
+    user = os.environ.get("ADMIN_USER", "")
+    pwd = os.environ.get("ADMIN_PASS", "")
+    if not user or not pwd:
+        abort(503, "admin page not configured: set ADMIN_USER and ADMIN_PASS")
+    a = request.authorization
+    if not a or a.username != user or a.password != pwd:
+        return app.response_class(
+            "authentication required",
+            status=401,
+            headers={"WWW-Authenticate": 'Basic realm="wifi-portal", charset="UTF-8"'},
+        )
+    return None
+
+
+@app.get("/clients")
+def clients_page():
+    guard = admin_guard()
+    if guard:
+        return guard
+    try:
+        active = router_get("ip/hotspot/active", **{"server": STAFF_HOTSPOT})
+    except Exception:
+        app.logger.exception("cannot read hotspot active")
+        active = []
+    names = _device_names()
+    rows = []
+    for a in active:
+        mac = str(a.get("mac-address", "")).lower()
+        rows.append(
+            {
+                "user": a.get("user", ""),
+                "address": a.get("address", ""),
+                "mac": mac,
+                "device": names.get(mac, ""),
+                "uptime": _fmt_uptime(a.get("uptime", "")),
+                "rx": _human_bytes(a.get("bytes-in", 0)),
+                "tx": _human_bytes(a.get("bytes-out", 0)),
+            }
+        )
+    rows.sort(key=lambda r: r["user"].lower())
+    return render_template("clients.html", rows=rows, brand=BRAND)
+
+
+@app.post("/clients/logout")
+def clients_logout():
+    guard = admin_guard()
+    if guard:
+        return guard
+    mac = _mac_ok(request.form.get("mac", ""))
+    if not mac:
+        abort(400, "a valid mac is required")
+    try:
+        # drop the live session, then the cookie so the device cannot auto-login
+        for a in router_get("ip/hotspot/active", **{"mac-address": mac}):
+            router_post("ip/hotspot/active/remove", {".id": a[".id"]})
+        for c in router_get("ip/hotspot/cookie", **{"mac-address": mac}):
+            router_post("ip/hotspot/cookie/remove", {".id": c[".id"]})
+    except Exception:
+        app.logger.exception("logout failed for %s", mac)
+        abort(502, "router refused the logout")
+    app.logger.info("logout mac=%s", mac)
+    return redirect(f"{PORTAL}/clients")
 
 
 if __name__ == "__main__":
