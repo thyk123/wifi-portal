@@ -58,12 +58,16 @@ STAFF_LOGIN_URL = os.environ.get("STAFF_LOGIN_URL", f"http://{STAFF_GW}/login")
 #         digest from the router-hosted bridge page (router/bridge-chap.html).
 # pap  -> the portal posts the plaintext password to the hotspot (old behaviour,
 #         keep as an emergency fallback).
-# pap  -> the portal posts the plaintext password to the hotspot. Default
-#         because it is the path proven to work end-to-end.
-# chap -> the router-hosted page hashes in the browser so the password never
-#         crosses the Wi-Fi link. Enable with STAFF_LOGIN_MODE=chap once that
-#         page has been verified on a real client.
-LOGIN_MODE = os.environ.get("STAFF_LOGIN_MODE", "pap").strip().lower()
+# Login hand-off mode:
+#   get  -> navigate to http://hotspot/login?username=..&password=.. (default).
+#           No mixed-content warning, so no "Send anyway" click. The password
+#           is visible in the browser history for the moment it takes the
+#           hotspot to consume it.
+#   form -> the old HTML form post. Works, but HTTPS -> HTTP form submission
+#           makes Chrome ask the user to confirm ("Send anyway").
+#   chap -> hash in the browser on a router-hosted page; password never crosses
+#           the Wi-Fi link, but needs hotspot-staff/bridge.html and a test.
+LOGIN_MODE = os.environ.get("STAFF_LOGIN_MODE", "get").strip().lower()
 CHAP_BRIDGE_URL = os.environ.get("CHAP_BRIDGE_URL", f"http://{STAFF_GW}/bridge.html")
 
 BRAND = {
@@ -390,6 +394,24 @@ def callback():
             quote_via=urllib.parse.quote,
         )
         return redirect(f"{CHAP_BRIDGE_URL}#{q}")
+
+    if LOGIN_MODE == "get":
+        # Navigate to the hotspot with the credentials as query parameters.
+        #
+        # Why not a form: the portal is HTTPS and the hotspot is HTTP, so a form
+        # post is "mixed content" and Chrome interrupts with
+        # "The information you're about to submit is not secure" -- an extra
+        # click for every user. A top-level navigation to http:// is ordinary
+        # browsing, so there is no warning and no confirmation.
+        q = urllib.parse.urlencode(
+            {
+                "username": username,
+                "password": password,
+                "dst": data.get("orig", ""),
+            },
+            quote_via=urllib.parse.quote,
+        )
+        return redirect(f"{STAFF_LOGIN_URL}?{q}")
 
     return render_template(
         "bridge.html",
