@@ -690,26 +690,12 @@ def devices_logout():
         app.logger.exception("device logout failed user=%s", user)
         abort(502, "router refused the logout")
 
-    # one-shot cleanup: drop the block so the device is not locked out for good
-    if blocked:
-        try:
-            for s in router_get("system/scheduler", name=f"kick-{mid}"):
-                router_post("system/scheduler/remove", {".id": s[".id"]})
-            router_post(
-                "system/scheduler/add",
-                {
-                    "name": f"kick-{mid}",
-                    "interval": "2m",
-                    "start-time": "00:00:00",
-                    "comment": "wifi-portal kick",
-                    "on-event": (
-                        f'/ip hotspot ip-binding remove [find where comment="{kick_comment}"]; '
-                        f'/system/scheduler remove [find where name="kick-{mid}"]'
-                    ),
-                },
-            )
-        except Exception:
-            app.logger.exception("could not schedule unblock for %s", mac)
+    # The block above is released by a PERMANENT scheduler on the router
+    # ("portal-unblock", every 30s): it renames the comment to "...:armed" on
+    # the first pass and deletes the binding on the next one, giving a ~30-60s
+    # block. Keeping this on the router means the portal needs no `policy`
+    # permission (its user only has read/write/test) and the cleanup still
+    # happens even if this request dies half-way.
 
     app.logger.info(
         "device logout user=%s sessions=%d cookies=%d blocked=%s remaining_active=%d remaining_cookies=%d",
