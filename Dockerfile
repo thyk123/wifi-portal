@@ -19,6 +19,6 @@ USER portal
 EXPOSE 8585
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8585/').read()"
+    CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8585/health').read()"
 
 CMD ["gunicorn", "-b", "0.0.0.0:8585", "--workers", "2", "--timeout", "30", "--access-logfile", "-", "app:app"]

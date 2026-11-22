@@ -61,7 +61,7 @@ and no file to paste into a container.
 Verify:
 
 ```sh
-curl -s http://127.0.0.1:8585/     # {"ok":true}
+curl -s http://127.0.0.1:8585/health     # {"ok":true}
 podman logs --tail 20 wifi-portal
 ```
 

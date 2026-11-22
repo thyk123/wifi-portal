@@ -190,13 +190,16 @@ def oidc_config():
 
 
 # --------------------------------------------------------------------- routes
-@app.get("/")
+@app.get("/health")
 def health():
-    # The container HEALTHCHECK and any API probe send no Accept header and must
-    # keep getting JSON. A real browser asks for text/html -> send it onwards.
-    if "text/html" in (request.headers.get("Accept") or ""):
-        return redirect(f"{PORTAL}/devices")
+    """Liveness probe. Kept separate from / so / can always redirect a browser."""
     return {"ok": True}
+
+
+@app.get("/")
+def index():
+    """A person typing the portal hostname lands on their device page."""
+    return redirect(f"{PORTAL}/devices")
 
 
 @app.get("/hotspot")
